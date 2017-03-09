@@ -66,8 +66,6 @@ def get_contig(graph, start_km):
         cand = [x for x in fw(current_km) if x in graph][0]
         if cand == start_km or cand == twin(start_km):
             break  # break out of cycles or mobius contigs
-        #if cand == twin(current_km):
-         #   break  # break out of hairpins
         if sum(x in graph for x in bw(cand)) != 1:
             break
         contig_fw.append(cand)
