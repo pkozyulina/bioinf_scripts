@@ -1,5 +1,9 @@
+####### arg1 = input file
+####### arg2 = output file
+####### arg3 = k (k-mer size, int)
+
 from Bio import Seq
-import collections
+import collections, sys
 
 # Creat a complementary chain
 def twin(read):
@@ -45,7 +49,8 @@ def fileparse(file, k=55, limit=1):
             read = twin(read)
             for km in split_read_to_kmer(read, k):
                 d[km] += 1
-  return d
+
+    return d
 
 # Merges list to string contig
 def contig_to_string(contig):
@@ -57,12 +62,12 @@ def get_contig(graph, start_km):
     while True:
         current_km = contig_fw[-1]
         if sum(x in graph for x in fw(current_km)) != 1:
-            break                                        # stops if a joint consists of multiple possible paths or no paths
+            break # stops if a joint consists of multiple possible paths or no paths
         cand = [x for x in fw(current_km) if x in graph][0]
         if cand == start_km or cand == twin(start_km):
-            break                                               # break out of cycles or mobius contigs
-        if cand == twin(current_km):
-            break                                               # break out of hairpins
+            break  # break out of cycles or mobius contigs
+        #if cand == twin(current_km):
+         #   break  # break out of hairpins
         if sum(x in graph for x in bw(cand)) != 1:
             break
         contig_fw.append(cand)
@@ -79,7 +84,6 @@ def combine_fw_and_bw(graph, start_km):
 def find_all_contigs(graph):
     contigs = set()
     checked = set()
-
     for km in graph:
         if km not in checked:
             checked.add(km)
@@ -95,9 +99,9 @@ def draw_dot(contigs, output_file, k):
     with open(output_file, "w") as outp:
         outp.write("digraph {\n")
         for contig in contigs:
-            start = contig[0:k]
-            end = contig[(len(contig) - k):len(contig)]
-            L = len(contig[k:(len(contig) - k)])
+            start = contig[0:(k-1)]
+            end = contig[(len(contig) - (k-1)):len(contig)]
+            L = len(contig[k:(len(contig) - (k-1))])
             outp.write('%s -> %s[label="C L %i"]\n' % (start, end, L))
         outp.write("}")
 
@@ -107,13 +111,13 @@ def draw_dot(contigs, output_file, k):
 
 
 ######## SCRIPT BODY #################
-input_file = "s_6.first1000.fastq" #"ECOLI_IS220_QUAKE_1K_paired_reads.fasta" #"s_6.first1000.fastq" #  # #sys.argv[1] "test1.fasta" #
-output_file = "test1.dot" #sys.argv[2]
-k = 55
+input_file = sys.argv[1]
+output_file = sys.argv[2]
+k = int(sys.argv[3])
 
 # Read input file and create a dict
 with open(input_file, "r") as fq:
     kmers = fileparse(fq, k)
-
 contigs = find_all_contigs(kmers)
 draw_dot(contigs, output_file, k)
+
