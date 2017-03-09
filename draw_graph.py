@@ -100,7 +100,7 @@ def draw_dot(contigs, output_file, k):
             start = contig[0:(k-1)]
             end = contig[(len(contig) - (k-1)):len(contig)]
             L = len(contig[k:(len(contig) - (k-1))])
-            outp.write('%s -> %s[label="C L %i"]\n' % (start, end, L))
+            outp.write('%s -> %s[label="C L %i"]\n' % (start, end, L)) # coverage will be added a bit later
         outp.write("}")
 
 
