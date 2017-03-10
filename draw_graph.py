@@ -128,7 +128,7 @@ def draw_dot(contigs, output_file, k):
         for contig in contigs:
             start = contig[0:(k-1)]
             end = contig[(len(contig) - (k-1)):len(contig)]
-            length_c = len(contig[k:(len(contig)-1)])
+            length_c = len(contig[k:len(contig)])
             if length_c != 0:
                 coverage = contigs[contig]/length_c
             else:
