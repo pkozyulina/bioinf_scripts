@@ -1,9 +1,13 @@
-####### arg1 = input file
-####### arg2 = output file
-####### arg3 = k (k-mer size, int)
-
 from Bio import Seq
-import collections, sys
+import collections, argparse
+
+parser = argparse.ArgumentParser(description='Generate graph from sequence reads and create a .dot file')
+parser.add_argument('-k', '--kmer',  default=55,  help='Set the k-mer size', type=int, metavar='INT')
+parser.add_argument('-o', '--output', help='Output file name', required=True, metavar='FILE')
+parser.add_argument('-i', '--input', help='Input file name', required=True, metavar='FILE')
+
+args = parser.parse_args()
+
 
 # Creat a complementary chain
 def twin(read):
@@ -66,6 +70,8 @@ def get_contig(graph, start_km):
         cand = [x for x in fw(current_km) if x in graph][0]
         if cand == start_km or cand == twin(start_km):
             break  # break out of cycles or mobius contigs
+        #if cand == twin(current_km):
+         #   break  # break out of hairpins
         if sum(x in graph for x in bw(cand)) != 1:
             break
         contig_fw.append(cand)
@@ -100,22 +106,20 @@ def draw_dot(contigs, output_file, k):
             start = contig[0:(k-1)]
             end = contig[(len(contig) - (k-1)):len(contig)]
             L = len(contig[k:(len(contig) - (k-1))])
-            outp.write('%s -> %s[label="C L %i"]\n' % (start, end, L)) # coverage will be added a bit later
+            outp.write('%s -> %s[label="C L %i"]\n' % (start, end, L))
         outp.write("}")
 
 
-
+# Read input file and create a dict
+def main(input_file, output_file, k):
+    with open(input_file, "r") as fq:
+        kmers = fileparse(fq, k)
+    contigs = find_all_contigs(kmers)
+    draw_dot(contigs, output_file, k)
 
 
 
 ######## SCRIPT BODY #################
-input_file = sys.argv[1]
-output_file = sys.argv[2]
-k = int(sys.argv[3])
-
-# Read input file and create a dict
-with open(input_file, "r") as fq:
-    kmers = fileparse(fq, k)
-contigs = find_all_contigs(kmers)
-draw_dot(contigs, output_file, k)
+if __name__ == "__main__":
+    main(args.input, args.output, args.kmer)
 
