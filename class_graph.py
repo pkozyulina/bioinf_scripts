@@ -17,13 +17,17 @@ class Edge:
         self.coverage += cov
 
     def merge(self, following_edge):
-        self.edge += following_edge[-1]
-        self.vertex_right = following_edge.vertex_right
-        self.coverage += following_edge.coverage
-        return
+        new_edge = Edge(self.edge, following_edge)
+        new_edge.vertex_left = self.vertex_left
+        new_edge.vertex_right = following_edge.vertex_right
+        new_edge.inc_coverage(self.coverage + following_edge.coverage)
+        return new_edge
 
-    def get_vertices(self):
-        return self.vertex_left, self.vertex_right
+    def get_vertices(self, direction):
+        if direction == "in":
+            return self.vertex_left
+        else:
+            return self.vertex_right
 
     def get_coverage(self):
         return self.coverage
@@ -57,45 +61,44 @@ class Vertex:
         self.vertex = seq
         self.edges = {'in': {}, 'out': {}}
 
+
     def add_edge(self, other, direction):
         if direction == 'in':
-            edge = Edge(other, self.vertex)
-        if direction == 'out':
-            edge = Edge(self.vertex,other)
+            edge = Edge(other, self)
+        else:
+            edge = Edge(self, other)
 
         if str(edge) not in self.edges[direction]:
             self.edges[direction][str(edge)] = edge
         else:
             self.edges[direction][str(edge)].inc_coverage()
 
-    #def extend_edge(self, edge, k, direction):
-        #self.edges[direction][st[:k]]
 
     def extend_edge(self, edge, k, direction):
-        print(self.vertex, edge, direction)
         if direction == 'in':
             key = str(edge)[len(str(edge))-k-1:]
         if direction == 'out':
             key = str(edge)[:k+1]
-        print( self.edges[direction])
+        #print(key)
         if key in self.edges[direction]:
             cov = self.edges[direction][key].coverage # IN
             edge.inc_coverage(cov)
             self.edges[direction].pop(key)
             self.edges[direction][str(edge)] = edge
-            print('result', self.edges[direction], self.edges[direction][str(edge)])
+#            print('Added new Edge %s with coverage %i to the Vertex %s' % (edge, edge.coverage, self.vertex))
+
 
     def compress(self):
         #print(self.vertex, self.edges)
         if len(self.edges['in']) != 1 or len(self.edges['out']) != 1:
             return False
+
         for in_edge in self.edges['in']:
             for out_edge in self.edges['out']:
-                self.edges['in'][in_edge].merge(self.edges['out'][out_edge])
+                new_edge = self.edges['in'][in_edge].merge(self.edges['out'][out_edge])
 
-        return self.edges['in'][in_edge]
-        # Returns False, if cannot be compressed
-        # Otherwise compresses this vertex and returns true
+        return new_edge
+
 
     def get_edges(self, direction):
         return self.edges[direction]
@@ -132,7 +135,7 @@ class Graph:
     def add_edge(self, seq1, seq2):
         # Increases coverage if the edge already exists
         ver1, ver2 = Vertex(seq1), Vertex(seq2)
-        if seq1 and seq2 in self.graph:
+        if seq1 in self.graph and seq2 in self.graph:
             self.graph[seq1].add_edge(self.graph[seq2], 'out')
             self.graph[seq2].add_edge(self.graph[seq1], 'in')
         elif seq1 in self.graph:
@@ -149,45 +152,49 @@ class Graph:
             self.graph[seq1] = ver1
             self.graph[seq2] = ver2
 
-    def split_read(self, read):
-        for i in range(len(read) - Graph.k):
-            yield read[i:i + Graph.k], read[i + 1:i + 1 + Graph.k]
+    def split_read(self, seq):
+        for i in range(len(seq) - Graph.k):
+            yield seq[i:i + Graph.k], seq[i+1:i + 1 + Graph.k]
 
-    def add_seq(self, read):
+    def add_seq(self, read): # Adds edges between all k-mers in the sequence
         for kmer1, kmer2 in self.split_read(read):
             self.add_edge(kmer1, kmer2)
 
     def compress(self):
-
         to_delete = []  # List of redundant vertices
-
         for kmer, vertex in self.graph.items():
             new_edge = vertex.compress()
             if new_edge:
                 to_delete.append(kmer)
-                self.graph[str(new_edge.vertex_right)].extend_edge(new_edge, Graph.k, 'in')
-                self.graph[str(new_edge.vertex_left)].extend_edge(new_edge, Graph.k,'out')
+                self.graph[str(new_edge.vertex_left)].extend_edge(new_edge, Graph.k, "out")
+                self.graph[str(new_edge.vertex_right)].extend_edge(new_edge, Graph.k, "in")
 
         for kmer in to_delete:
             del(self.graph[kmer])
 
-    # Delete redundant vertex
+    def save_dot(self, output_file):
+        dict = collections.defaultdict(list)
+        with open(output_file.name, "w") as outp:
+            outp.write("digraph {\n")
+            for key, vertex in self.graph.items():
+                if vertex.get_edges('in'):
+                    for edge in vertex.edges['in']:
+                        outp.write("%s -> %s [label = %s];\n" % (vertex.edges['in'][edge].get_vertices("in"), vertex, edge))
+                    dict[vertex.edges['in'][edge].get_vertices("in")].append(vertex)
+                if vertex.get_edges('out'):
+                    for edge in vertex.edges['out']:
+                        outp.write("%s -> %s [label = %s];\n" % (vertex, vertex.edges['out'][edge].get_vertices("out"), edge))
+                    dict[vertex].append(vertex.edges['out'][edge].get_vertices("out"))
+            outp.write("}")
+        for key, value in dict.items():
+            print(key, value)
 
-    def save_dot(self): #, output_file):
-        #with open(output_file, "w") as outp:
-            #outp.write("digraph {\n")
-        for key, vertex in self.graph.items():
-            if vertex.get_edges('in'):
-                for edge in vertex.edges['in']:
-                    print(vertex.edges['in'][edge].get_vertices())
-            if vertex.get_edges('out'):
-                for edge in vertex.edges['out']:
-                    print(vertex.edges['out'][edge].get_vertices())
-            #print('%s -> [label="EDGE = %s %s "]\n' % (value,  value.edges['in'], value.edges['out']))
-                #outp.write('%s -> [label="EDGE = %s %s "]\n' % (value, value.edges['in'], value.edges['out']))
+    def __len__(self):
+        return len(self.graph)
 
     def __str__(self):
         return str(self.graph)
+
 
 
 complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N'}
@@ -198,18 +205,13 @@ def reverse_complement(seq):
 
 
 def read_fastq(f):
-    '''
     for line in f:
         name = line.strip()
         seq = next(f).strip()
         next(f)
         next(f)
         yield name, seq
-    '''
-    for line in f:
-        name = line.strip()
-        seq = line.strip()
-        yield name, seq
+
 
 def read_fasta(f):
     name = None
@@ -254,23 +256,13 @@ def main():
         graph.add_seq(seq)
         graph.add_seq(reverse_complement(seq))
 
-    print(graph)
-    #for kmer, vertex in graph.graph.items():
-      #  print('VERTEX = %s, EDGES = %s %s' % (vertex, vertex.get_edges('in'), vertex.get_edges('out')))
-
-
-
-   # for kmer, vertex in graph.graph.items():
-
-        #print('VERTEX = %s, EDGES = %s %s' % (vertex, vertex.get_edges('in'), vertex.get_edges('out')))
-    print(graph)
 
     if args.compress:
         graph.compress()
-    #graph.save(args.output)
-    graph.save_dot() #args.output)
-    print(graph)
+
+    graph.save_dot(args.output)
 
 
 if __name__ == '__main__':
     main()
+
