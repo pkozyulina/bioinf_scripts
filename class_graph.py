@@ -1,30 +1,36 @@
 #!/usr/bin/env python3
 
-import argparse, collections
+import argparse
+import collections
 from tqdm import tqdm
-
 
 class Edge:
     show_sequences = False
 
     def __init__(self, v1, v2): # Edge instance should contain starting and finishing vertices, coverage and edge sequence
-        self.edge = v1 + v2[-1]
+        if str(v1)[1:] == str(v2)[:-1]:
+            self.edge = v1 + v2[-1]
+        else:
+            self.edge = str(v1[:-Graph.k]) + str(v2)
         self.vertex_left = v1
         self.vertex_right = v2
         self.coverage = 1
+
 
     def inc_coverage(self, cov=1):
         self.coverage += cov
 
     def merge(self, following_edge):
-        new_edge = Edge(self.edge, following_edge)
-        new_edge.vertex_left = self.vertex_left
-        new_edge.vertex_right = following_edge.vertex_right
-        new_edge.inc_coverage(self.coverage + following_edge.coverage)
+        if self.vertex_right == following_edge.vertex_left:
+            new_edge = Edge(self.edge, following_edge)
+            new_edge.vertex_left = self.vertex_left
+            new_edge.vertex_right = following_edge.vertex_right
+            new_edge.inc_coverage(self.coverage + following_edge.coverage)
+
         return new_edge
 
     def get_vertices(self, direction):
-        if direction == "in":
+        if direction == 0:
             return self.vertex_left
         else:
             return self.vertex_right
@@ -33,7 +39,7 @@ class Edge:
         return self.coverage
 
     def __eq__(self, other):
-        return self.edge == other
+        return self.edge == other.edge
 
     def __getitem__(self, i):
         return self.edge[i]
@@ -54,16 +60,20 @@ class Edge:
         return str(self.edge)
 
 
+            #  def __repr__(self):
+   #     return str(self.edge)
+
+
 class Vertex:
     show_sequences = False
 
     def __init__(self, seq):
         self.vertex = seq
-        self.edges = {'in': {}, 'out': {}}
+        self.edges = [{}, {}]
 
 
     def add_edge(self, other, direction):
-        if direction == 'in':
+        if direction == 0:
             edge = Edge(other, self)
         else:
             edge = Edge(self, other)
@@ -74,34 +84,25 @@ class Vertex:
             self.edges[direction][str(edge)].inc_coverage()
 
 
-    def extend_edge(self, edge, k, direction):
-        if direction == 'in':
-            key = str(edge)[len(str(edge))-k-1:]
-        if direction == 'out':
-            key = str(edge)[:k+1]
-        #print(key)
-        if key in self.edges[direction]:
-            cov = self.edges[direction][key].coverage # IN
-            edge.inc_coverage(cov)
-            self.edges[direction].pop(key)
-            self.edges[direction][str(edge)] = edge
-#            print('Added new Edge %s with coverage %i to the Vertex %s' % (edge, edge.coverage, self.vertex))
+    def extend_edge(self, new_edge, old_edge, direction):
+            cov = self.edges[direction].pop(str(old_edge)).coverage
+            new_edge.inc_coverage(cov)
+            self.edges[direction][str(new_edge)] = new_edge
 
 
     def compress(self):
-        #print(self.vertex, self.edges)
-        if len(self.edges['in']) != 1 or len(self.edges['out']) != 1:
-            return False
+        if len(self.edges[0]) != 1 or len(self.edges[1]) != 1:
+            return None
 
-        for in_edge in self.edges['in']:
-            for out_edge in self.edges['out']:
-                new_edge = self.edges['in'][in_edge].merge(self.edges['out'][out_edge])
+        in_edge = list(self.edges[0].values())[0]
+        out_edge = list(self.edges[1].values())[0]
+        new_edge = in_edge.merge(out_edge)
 
         return new_edge
 
 
     def get_edges(self, direction):
-        return self.edges[direction]
+        return self.edges[direction] != {}
 
     def __add__(self, other):
         return self.vertex + other
@@ -124,6 +125,9 @@ class Vertex:
     def __repr__(self):
         return str(self.vertex)
 
+    def __len__(self):
+        return len(self.vertex)
+
 
 class Graph:
     k = None
@@ -134,21 +138,24 @@ class Graph:
 
     def add_edge(self, seq1, seq2):
         # Increases coverage if the edge already exists
-        ver1, ver2 = Vertex(seq1), Vertex(seq2)
+
         if seq1 in self.graph and seq2 in self.graph:
-            self.graph[seq1].add_edge(self.graph[seq2], 'out')
-            self.graph[seq2].add_edge(self.graph[seq1], 'in')
+            self.graph[seq1].add_edge(self.graph[seq2], 1)
+            self.graph[seq2].add_edge(self.graph[seq1], 0)
         elif seq1 in self.graph:
-            self.graph[seq1].add_edge(ver2, 'out')
-            ver2.add_edge(self.graph[seq1], 'in')
+            ver2 = Vertex(seq2)
+            self.graph[seq1].add_edge(ver2, 1)
+            ver2.add_edge(self.graph[seq1], 0)
             self.graph[seq2] = ver2
         elif seq2 in self.graph:
-            self.graph[seq2].add_edge(ver1, 'in')
-            ver1.add_edge(self.graph[seq2], 'out')
+            ver1 = Vertex(seq1)
+            self.graph[seq2].add_edge(ver1, 0)
+            ver1.add_edge(self.graph[seq2], 1)
             self.graph[seq1] = ver1
         else:
-            ver1.add_edge(ver2, 'out')
-            ver2.add_edge(ver1, 'in')
+            ver1, ver2 = Vertex(seq1), Vertex(seq2)
+            ver1.add_edge(ver2, 1)
+            ver2.add_edge(ver1, 0)
             self.graph[seq1] = ver1
             self.graph[seq2] = ver2
 
@@ -162,32 +169,34 @@ class Graph:
 
     def compress(self):
         to_delete = []  # List of redundant vertices
+
         for kmer, vertex in self.graph.items():
             new_edge = vertex.compress()
             if new_edge:
                 to_delete.append(kmer)
-                self.graph[str(new_edge.vertex_left)].extend_edge(new_edge, Graph.k, "out")
-                self.graph[str(new_edge.vertex_right)].extend_edge(new_edge, Graph.k, "in")
+                self.graph[str(new_edge.vertex_left)].extend_edge(new_edge, list(vertex.edges[0].values())[0], 1)
+                self.graph[str(new_edge.vertex_right)].extend_edge(new_edge, list(vertex.edges[1].values())[0], 0)
 
         for kmer in to_delete:
             del(self.graph[kmer])
 
     def save_dot(self, output_file):
-        dict = collections.defaultdict(list)
+        printed_vertecies = set()
         with open(output_file.name, "w") as outp:
             outp.write("digraph {\n")
-            for key, vertex in self.graph.items():
-                if vertex.get_edges('in'):
-                    for edge in vertex.edges['in']:
-                        outp.write("%s -> %s [label = %s];\n" % (vertex.edges['in'][edge].get_vertices("in"), vertex, edge))
-                    dict[vertex.edges['in'][edge].get_vertices("in")].append(vertex)
-                if vertex.get_edges('out'):
-                    for edge in vertex.edges['out']:
-                        outp.write("%s -> %s [label = %s];\n" % (vertex, vertex.edges['out'][edge].get_vertices("out"), edge))
-                    dict[vertex].append(vertex.edges['out'][edge].get_vertices("out"))
+            for kmer, vertex in self.graph.items():
+                if vertex.get_edges(0):
+                    in_edge = list(vertex.edges[0].values())[0]
+                    if str(in_edge.vertex_left) not in printed_vertecies and kmer not in printed_vertecies:
+                        outp.write("%s -> %s [label = C%i];\n" % (in_edge.vertex_left, vertex, in_edge.coverage/(len(in_edge) - Graph.k)))
+                        printed_vertecies.add(kmer)
+
+                if vertex.get_edges(1):
+                    out_edge = list(vertex.edges[1].values())[0]
+                    if str(out_edge.vertex_right) not in printed_vertecies and kmer not in printed_vertecies:
+                        outp.write("%s -> %s [label = C%i];\n" % (vertex, out_edge.vertex_right, out_edge.coverage/(len(out_edge) - Graph.k)))
+                        printed_vertecies.add(kmer)
             outp.write("}")
-        for key, value in dict.items():
-            print(key, value)
 
     def __len__(self):
         return len(self.graph)
@@ -256,7 +265,6 @@ def main():
         graph.add_seq(seq)
         graph.add_seq(reverse_complement(seq))
 
-
     if args.compress:
         graph.compress()
 
@@ -265,4 +273,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
