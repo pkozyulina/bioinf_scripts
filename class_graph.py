@@ -20,7 +20,9 @@ class Edge:
     def inc_coverage(self, cov=1):
         self.coverage += cov
 
+
     def merge(self, following_edge):
+
         if self.vertex_right == following_edge.vertex_left:
             new_edge = Edge(self.edge, following_edge)
             new_edge.vertex_left = self.vertex_left
@@ -29,14 +31,13 @@ class Edge:
 
         return new_edge
 
-    def get_vertices(self, direction):
-        if direction == 0:
-            return self.vertex_left
-        else:
-            return self.vertex_right
 
-    def get_coverage(self):
-        return self.coverage
+    def get_vertex(self, direction):
+        if direction == 0:
+            return str(self.vertex_left)
+        else:
+            return str(self.vertex_right)
+
 
     def __eq__(self, other):
         return self.edge == other.edge
@@ -60,10 +61,6 @@ class Edge:
         return str(self.edge)
 
 
-            #  def __repr__(self):
-   #     return str(self.edge)
-
-
 class Vertex:
     show_sequences = False
 
@@ -73,15 +70,23 @@ class Vertex:
 
 
     def add_edge(self, other, direction):
+
+        if direction == 0:
+            edge = str(other + self[-1])
+        else:
+            edge = str(self + other[-1])
+
+        if edge in self.edges[direction]:
+            self.edges[direction][edge].inc_coverage()
+            return
+
         if direction == 0:
             edge = Edge(other, self)
         else:
             edge = Edge(self, other)
 
-        if str(edge) not in self.edges[direction]:
-            self.edges[direction][str(edge)] = edge
-        else:
-            self.edges[direction][str(edge)].inc_coverage()
+        self.edges[direction][str(edge)] = edge
+        return
 
 
     def extend_edge(self, new_edge, old_edge, direction):
@@ -101,7 +106,7 @@ class Vertex:
         return new_edge
 
 
-    def get_edges(self, direction):
+    def is_edge(self, direction):
         return self.edges[direction] != {}
 
     def __add__(self, other):
@@ -133,12 +138,11 @@ class Graph:
     k = None
 
     def __init__(self):
-        # Contains all vertices
         self.graph = collections.defaultdict(Vertex)
 
-    def add_edge(self, seq1, seq2):
-        # Increases coverage if the edge already exists
 
+    def add_edge(self, seq1, seq2):
+        
         if seq1 in self.graph and seq2 in self.graph:
             self.graph[seq1].add_edge(self.graph[seq2], 1)
             self.graph[seq2].add_edge(self.graph[seq1], 0)
@@ -159,13 +163,16 @@ class Graph:
             self.graph[seq1] = ver1
             self.graph[seq2] = ver2
 
+
     def split_read(self, seq):
         for i in range(len(seq) - Graph.k):
             yield seq[i:i + Graph.k], seq[i+1:i + 1 + Graph.k]
 
+
     def add_seq(self, read): # Adds edges between all k-mers in the sequence
         for kmer1, kmer2 in self.split_read(read):
             self.add_edge(kmer1, kmer2)
+
 
     def compress(self):
         to_delete = []  # List of redundant vertices
@@ -180,23 +187,24 @@ class Graph:
         for kmer in to_delete:
             del(self.graph[kmer])
 
+
     def save_dot(self, output_file):
         printed_vertecies = set()
         with open(output_file.name, "w") as outp:
             outp.write("digraph {\n")
             for kmer, vertex in self.graph.items():
-                if vertex.get_edges(0):
-                    in_edge = list(vertex.edges[0].values())[0]
-                    if str(in_edge.vertex_left) not in printed_vertecies and kmer not in printed_vertecies:
-                        outp.write("%s -> %s [label = C%i];\n" % (in_edge.vertex_left, vertex, in_edge.coverage/(len(in_edge) - Graph.k)))
-                        printed_vertecies.add(kmer)
+                for i in range(2):
+                    if vertex.is_edge(i):
+                        edge = list(vertex.edges[i].values())[0]
+                        if edge.get_vertex(i) not in printed_vertecies and kmer not in printed_vertecies:
+                            if i == 0:
+                                outp.write("%s -> %s [label = C%i];\n" % (edge.get_vertex(i), vertex, edge.coverage / (len(edge) - Graph.k)))
+                            else:
+                                outp.write("%s -> %s [label = C%i];\n" % (vertex, edge.get_vertex(i), edge.coverage / (len(edge) - Graph.k)))
+                            printed_vertecies.add(kmer)
 
-                if vertex.get_edges(1):
-                    out_edge = list(vertex.edges[1].values())[0]
-                    if str(out_edge.vertex_right) not in printed_vertecies and kmer not in printed_vertecies:
-                        outp.write("%s -> %s [label = C%i];\n" % (vertex, out_edge.vertex_right, out_edge.coverage/(len(out_edge) - Graph.k)))
-                        printed_vertecies.add(kmer)
             outp.write("}")
+
 
     def __len__(self):
         return len(self.graph)
