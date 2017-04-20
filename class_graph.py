@@ -81,17 +81,13 @@ class Vertex:
             return
 
         if direction == 0:
-            edge = Edge(other, self)
+            self.edges[direction][edge] = other.edges[1][edge]
         else:
-            edge = Edge(self, other)
-
-        self.edges[direction][str(edge)] = edge
-        return
+            self.edges[direction][edge] = Edge(self, other)
 
 
     def extend_edge(self, new_edge, old_edge, direction):
-            cov = self.edges[direction].pop(str(old_edge)).coverage
-            new_edge.inc_coverage(cov)
+            self.edges[direction].pop(str(old_edge))
             self.edges[direction][str(new_edge)] = new_edge
 
 
@@ -140,30 +136,20 @@ class Graph:
     def __init__(self):
         self.graph = collections.defaultdict(Vertex)
 
-
-    def add_edge(self, seq1, seq2):
         
-        if seq1 in self.graph and seq2 in self.graph:
-            self.graph[seq1].add_edge(self.graph[seq2], 1)
-            self.graph[seq2].add_edge(self.graph[seq1], 0)
-        elif seq1 in self.graph:
-            ver2 = Vertex(seq2)
-            self.graph[seq1].add_edge(ver2, 1)
-            ver2.add_edge(self.graph[seq1], 0)
-            self.graph[seq2] = ver2
-        elif seq2 in self.graph:
-            ver1 = Vertex(seq1)
-            self.graph[seq2].add_edge(ver1, 0)
-            ver1.add_edge(self.graph[seq2], 1)
-            self.graph[seq1] = ver1
-        else:
-            ver1, ver2 = Vertex(seq1), Vertex(seq2)
-            ver1.add_edge(ver2, 1)
-            ver2.add_edge(ver1, 0)
-            self.graph[seq1] = ver1
-            self.graph[seq2] = ver2
+    def is_in_graph(self, seq):
+        if seq not in self.graph:
+            self.graph[seq] = Vertex(seq)
 
+            
+    def add_edge(self, seq1, seq2):
+        self.is_in_graph(seq1)
+        self.is_in_graph(seq2)
 
+        self.graph[seq1].add_edge(self.graph[seq2], 1)
+        self.graph[seq2].add_edge(self.graph[seq1], 0)
+
+        
     def split_read(self, seq):
         for i in range(len(seq) - Graph.k):
             yield seq[i:i + Graph.k], seq[i+1:i + 1 + Graph.k]
