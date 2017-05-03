@@ -5,7 +5,7 @@ import collections
 from tqdm import tqdm
 
 class Edge:
-    show_sequences = False
+    show_sequences = True
 
     def __init__(self, v1, v2): # Edge instance should contain starting and finishing vertices, coverage and edge sequence
         if str(v1)[1:] == str(v2)[:-1]:
@@ -15,6 +15,11 @@ class Edge:
         self.vertex_left = v1
         self.vertex_right = v2
         self.coverage = 1
+
+    def print_vertecies(self, k):
+        if Edge.show_sequences:
+            return '%s -> %s [label = "C %i\nL %i\n %s"];\n' % (self.vertex_left, self.vertex_right, self.coverage/(len(self.edge) - k), (len(self.edge) - k), self.edge)
+        return '%s -> %s [label = "C %i\nL %i"];\n' % (self.vertex_left, self.vertex_right, self.coverage /(len(self.edge) - k), (len(self.edge) - k))
 
 
     def inc_coverage(self, cov=1):
@@ -27,7 +32,7 @@ class Edge:
             new_edge = Edge(self.edge, following_edge)
             new_edge.vertex_left = self.vertex_left
             new_edge.vertex_right = following_edge.vertex_right
-            new_edge.inc_coverage(self.coverage + following_edge.coverage)
+            new_edge.inc_coverage(self.coverage + following_edge.coverage - 2)
 
         return new_edge
 
@@ -62,7 +67,6 @@ class Edge:
 
 
 class Vertex:
-    show_sequences = False
 
     def __init__(self, seq):
         self.vertex = seq
@@ -132,16 +136,15 @@ class Vertex:
 
 class Graph:
     k = None
+    show_vertex = True
 
     def __init__(self):
         self.graph = collections.defaultdict(Vertex)
 
-        
     def is_in_graph(self, seq):
         if seq not in self.graph:
             self.graph[seq] = Vertex(seq)
 
-            
     def add_edge(self, seq1, seq2):
         self.is_in_graph(seq1)
         self.is_in_graph(seq2)
@@ -149,7 +152,7 @@ class Graph:
         self.graph[seq1].add_edge(self.graph[seq2], 1)
         self.graph[seq2].add_edge(self.graph[seq1], 0)
 
-        
+
     def split_read(self, seq):
         for i in range(len(seq) - Graph.k):
             yield seq[i:i + Graph.k], seq[i+1:i + 1 + Graph.k]
@@ -178,17 +181,13 @@ class Graph:
         printed_vertecies = set()
         with open(output_file.name, "w") as outp:
             outp.write("digraph {\n")
-            for kmer, vertex in self.graph.items():
-                for i in range(2):
-                    if vertex.is_edge(i):
-                        edge = list(vertex.edges[i].values())[0]
-                        if edge.get_vertex(i) not in printed_vertecies and kmer not in printed_vertecies:
-                            if i == 0:
-                                outp.write("%s -> %s [label = C%i];\n" % (edge.get_vertex(i), vertex, edge.coverage / (len(edge) - Graph.k)))
-                            else:
-                                outp.write("%s -> %s [label = C%i];\n" % (vertex, edge.get_vertex(i), edge.coverage / (len(edge) - Graph.k)))
-                            printed_vertecies.add(kmer)
-
+            if not Graph.show_vertex:
+                outp.write('node[label=""];')
+            for seq, vertex in self.graph.items():
+                if seq not in printed_vertecies:
+                    for in_edge in vertex.edges[0]:
+                        outp.write(vertex.edges[0][in_edge].print_vertecies(Graph.k))
+                    printed_vertecies.add(seq)
             outp.write("}")
 
 
@@ -251,7 +250,8 @@ def main():
     args = parser.parse_args()
 
     Graph.k = args.k
-    Vertex.show_sequences = args.vertex
+
+    Graph.show_vertex = args.vertex
     Edge.show_sequences = args.edge
 
     graph = Graph()
